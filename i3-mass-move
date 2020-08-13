@@ -1,0 +1,132 @@
+#!/usr/bin/python3
+
+usage = """
+i3-mass-move <find> <change>
+
+<find>:
+    "all"
+    "+4"
+        focused workspace & the 4 next workspaces
+    "^thing"
+        workspaces starting with "thing"
+
+<change>:
+    "+9", "-3"
+        change last number
+    "s/old/new"
+        regex
+    "some_string"
+        prefix
+
+
+examples:
+    i3-mass-move all -1
+    i3-mass-move +3 s/foo/bar
+    i3-mass-move +2 prefix-
+    i3-mass-move s/foo/bar
+        (special cased)
+"""
+
+
+import os, sys, json, subprocess, re
+
+def jrun(*args):
+    args = ('i3-msg',) + args
+    print("> " + repr(list(args)))
+    f = subprocess.Popen(args, stdout=subprocess.PIPE)
+    t = f.stdout.read()
+    print("<", f.wait())
+    return json.loads(t)
+
+
+try:
+    if len(sys.argv) == 2 and sys.argv[1].startswith("s/"):
+        a = "all"
+        c = sys.argv[1]
+    else:
+        a = sys.argv[1]
+        c = sys.argv[2]
+except:
+    raise SystemExit(usage.replace("i3-mass-move", os.path.basename(sys.argv[0])))
+
+
+workspaces = jrun("-t", "get_workspaces")
+#print(workspaces)
+
+selection = []
+
+if a.startswith("+"):
+    count = int(a)
+    found = False
+    for i, w in enumerate(workspaces):
+        found |= w["focused"]
+        if found and count >= 0:
+            count -= 1
+            selection += [i]
+elif a.startswith("^"):
+    a = a[1:]
+    for i, w in enumerate(workspaces):
+        name = w['name']
+        if name.startswith(a):
+            selection += [i]
+elif a == 'all':
+    for i, w in enumerate(workspaces):
+        selection += [i]
+elif a == '.':
+    for i, w in enumerate(workspaces):
+        if w['focused']:
+            selection += [i]
+
+print(selection)
+assert(selection)
+rename = {}
+
+if c.startswith("+") or c.startswith("-"):
+    try: delta = int(c)
+    except:
+        if c == '+': delta = +1
+        elif c == '-': delta = -1
+        else: raise
+    for i in selection:
+        w = workspaces[i]
+        name = w['name']
+        found = list(re.finditer("\d+", name))
+        if not found: continue
+        found = found[-1]
+        span = found.span()
+        val = found.string[span[0]:span[1]]
+        val = int(val)
+        new = found.string[:span[0]] + str(val + delta) + found.string[span[1]:]
+        rename[name] = new
+elif c.startswith("s/"):
+    s = c.split('/')
+    assert(len(s) == 3)
+    for i in selection:
+        w = workspaces[i]
+        name = w['name']
+        new = re.sub(s[1], s[2], name)
+        if new != name:
+            rename[name] = new
+else:
+    for i in selection:
+        w = workspaces[i]
+        name = w['name']
+        rename[name] = c + name
+
+
+print(rename)
+
+n = 99
+existing = set(w['name'] for w in workspaces)
+while n and rename:
+    n -= 1
+    for old, new in rename.items():
+        if new in existing: continue
+        del rename[old]
+        existing.remove(old)
+        existing.add(new)
+        n += 1
+        jrun("rename", "workspace", old, "to", new)
+        break
+
+print(rename)
