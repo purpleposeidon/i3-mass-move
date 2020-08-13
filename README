@@ -1,0 +1,25 @@
+i3-mass-move <find> <change>
+
+<find>:
+    "all"
+    "+4"
+        focused workspace & the 4 next workspaces
+    "^thing"
+        workspaces starting with "thing"
+
+<change>:
+    "+9", "-3"
+        change last number
+    "s/old/new"
+        regex
+    "some_string"
+        prefix
+
+
+examples:
+    i3-mass-move all -1
+    i3-mass-move +3 s/foo/bar
+    i3-mass-move +2 prefix-
+    i3-mass-move s/foo/bar
+        (special cased)
+
